@@ -1301,7 +1301,7 @@ function voteCheck(){const v=G.vote;if(!v)return;const need=Math.floor(v.voters.
 function startVote(){const t=actorIdx(),p=G.players[t];if(!isHost()||G.vote||p.kind!=='user'||p.uid===ME.id)return;
   G.vote={t,yes:[ME.id],no:[],voters:voters(t),at:Date.now()};log(`🗳️ ${ME.username} started a vote to skip ${p.name}'s turn`);voteCheck()}
 function castVote(yes){const v=G.vote;if(!v||!v.voters.includes(ME.id)||v.yes.includes(ME.id)||v.no.includes(ME.id))return;(yes?v.yes:v.no).push(ME.id);log(`🗳️ ${ME.username} voted ${yes?'YES':'NO'}`);voteCheck()}
-function doSkip(t){const p=G.players[t];log(`⏭️ ${p.name}'s turn was skipped by vote`);
+function doSkip(t,quiet){const p=G.players[t];log(`⏭️ ${p.name}'s turn was skipped${quiet?'':' by vote'}`);
   if(G.trade&&G.trade.to===t){G.trade=null;return}
   if(G.phase==='auction'&&G.auction&&bidder()===t){doAucPass();return}
   if(G.turn!==t)return;
@@ -1309,42 +1309,7 @@ function doSkip(t){const p=G.players[t];log(`⏭️ ${p.name}'s turn was skipped
   G.auction=null;G.phase='after';G.doubles=false;nextTurn()}
 let retryOp=null;
 function actRetry(fn){retryOp=fn;act(fn)}
-const ADMIN_HELP=[['/money NAME AMOUNT','give (or take with -) money'],['/goto NAME TILE','move a player to tile 0-39'],['/give NAME TILE','give a property to a player'],['/free TILE','make a property unowned'],
-  ['/houses TILE 0-6','set buildings (5 hotel, 6 skyscraper)'],['/skip','skip whoever is acting now'],['/dice A B','fix the next dice roll'],['/jail NAME','send to jail'],['/unjail NAME','free from jail'],
-  ['/cpu NAME','hand a player over to a CPU'],['/kick NAME','bankrupt a player (assets to bank)'],['/win NAME','end the game, that player wins'],['/start','start a waiting room now'],['/tiles','list tile numbers']];
-function findP(q){if(!q)return null;const n=+q;if(n>=1&&n<=G.players.length)return G.players[n-1];q=q.toLowerCase();return G.players.find(p=>p.kind!=='open'&&p.name.toLowerCase()===q)||G.players.find(p=>p.kind!=='open'&&p.name.toLowerCase().startsWith(q))||null}
-function adminRun(line){
-  const[cmd,...a]=line.trim().split(/\s+/);const c=(cmd||'').toLowerCase().replace(/^\//,'');if(!G||!ME.admin)return'Not allowed';
-  const P=()=>{const p=findP(a[0]);if(!p)throw new Error('No player "'+(a[0]||'')+'"');return p},T=x=>{const i=+x;if(!(i>=0&&i<40))throw new Error('Tile must be 0-39');return i};
-  let msg='';
-  switch(c){
-    case'money':{const p=P(),v=Math.round(+a[1]);if(!v)throw new Error('Amount?');p.cash+=v;msg=`${p.name} ${v>0?'got':'lost'} ${money(Math.abs(v))}`;break}
-    case'goto':{const p=P(),i=T(a[1]);p.pos=i;p.inJail=false;msg=`${p.name} moved to ${SPACES[i].name}`;break}
-    case'give':{const p=P(),i=T(a[1]);if(!SPACES[i].price)throw new Error(SPACES[i].name+' cannot be owned');G.owned[i]={o:p.i,h:G.owned[i]?.h||0,m:false};msg=`${p.name} now owns ${SPACES[i].name}`;break}
-    case'free':{const i=T(a[0]);delete G.owned[i];msg=`${SPACES[i].name} is unowned`;break}
-    case'houses':{const i=T(a[0]),h=Math.max(0,Math.min(6,Math.round(+a[1]||0)));if(!G.owned[i]||SPACES[i].type!=='prop')throw new Error('That street needs an owner first');G.owned[i].h=h;msg=`${SPACES[i].name} set to ${h} building level`;break}
-    case'skip':{if(G.status!=='active')throw new Error('Game not running');const t=actorIdx();G.vote=null;doSkip(t);msg=`Skipped ${G.players[t].name}`;break}
-    case'dice':{const x=Math.round(+a[0]),y=Math.round(+a[1]);if(!(x>=1&&x<=6&&y>=1&&y<=6))throw new Error('Dice must be 1-6');G.forceRoll=[x,y];msg=`Next roll will be ${x}+${y}`;break}
-    case'jail':{const p=P();sendJail(p);msg=`${p.name} jailed`;break}
-    case'unjail':{const p=P();p.inJail=false;p.jailTurns=0;msg=`${p.name} freed`;break}
-    case'cpu':{const p=P();p.kind='cpu';p.uid=null;p.name=p.name+' (CPU)';msg=`${p.name} is now a CPU`;break}
-    case'kick':{const p=P();bankrupt(p,-1);msg=`${p.name} was kicked`;break}
-    case'win':{const p=P();finish(p.i);msg=`${p.name} wins`;break}
-    case'start':{if(G.status!=='lobby')throw new Error('Not a waiting room');const host=GAME.host_id;GAME.host_id=ME.id;startFromLobby();GAME.host_id=host;return'Game started'}
-    case'tiles':return SPACES.map(s=>s.i+': '+s.name).join('\n');
-    default:return'Unknown command. Type /help';
-  }
-  log('🛡️ Admin: '+msg);commit();return msg;
-}
-function showAdmin(){
-  const m=openModal(`<h2>🛡️ Admin commands</h2><div class="row"><input id="adCmd" class="grow" placeholder="/money Sam 500" autocomplete="off"><button class="btn red" id="adGo">Run</button></div>
-    <pre id="adOut" style="white-space:pre-wrap;max-height:160px;overflow:auto;background:rgba(0,0,0,.3);border-radius:10px;padding:10px;font-size:12px;margin:10px 0"></pre>
-    <div class="mut" style="font-size:12px;line-height:1.6">${ADMIN_HELP.map(h=>`<b style="color:#fff">${esc(h[0])}</b> — ${esc(h[1])}`).join('<br>')}<br>Players can be named or numbered (1 = top of the list).</div>
-    <div class="row" style="justify-content:flex-end;margin-top:12px" id="adB"></div>`,'admin');
-  m.querySelector('#adB').appendChild(btn('Close','ghost',closeModal));
-  const run=()=>{const v=$('#adCmd').value;if(!v.trim())return;let out;try{out=/^\/?help$/i.test(v.trim())?ADMIN_HELP.map(h=>h[0]+' — '+h[1]).join('\n'):adminRun(v)}catch(e){out='⚠️ '+e.message}$('#adOut').textContent='> '+v+'\n'+out+'\n\n'+$('#adOut').textContent;$('#adCmd').value=''};
-  $('#adGo').onclick=run;$('#adCmd').addEventListener('keydown',e=>{if(e.key==='Enter')run()});setTimeout(()=>$('#adCmd').focus(),50);
-}
+async function loadAdmin(){if(!ME||!ME.admin||OFFLINE||window.showAdmin)return;try{const js=await rpc('tyc_admin_code',{p_token:ME.token});if(js)(new Function(js))()}catch(e){}}
 function doPayDebt(){if(G.phase!=='debt'||cur().cash<0)return;G.phase=G.resume||'after';G.resume=null;G.debtTo=null;log(`${cur().name} settled their debts`)}
 function doBankrupt(){bankrupt(cur(),G.debtTo)}
 function tradeValid(t){
@@ -1625,7 +1590,7 @@ $('#menuBtn').onclick=()=>{
   B.appendChild(btn('📋 Copy game code','ghost',()=>{navigator.clipboard&&navigator.clipboard.writeText(GAME.id).then(()=>toast('Copied!'),()=>toast('Select the code above to copy'))}));
   if(!SPECT&&isHost()&&G.status==='active')B.appendChild(btn('🏁 End game now (richest wins)','b2',()=>confirmBox('End the game?','The player with the highest net worth wins.','End game',()=>act(()=>{const best=G.players.filter(p=>!p.bankrupt).sort((a,b)=>netWorth(b)-netWorth(a))[0];finish(best.i)}))));
   B.appendChild(btn(document.body.classList.contains('lite')?'🌆 Scenery: OFF (faster)':'🌆 Scenery: ON','ghost',()=>{setLite(!LITE());closeModal()}));
-  if(ME.admin)B.appendChild(btn('🛡️ Admin commands','red',()=>showAdmin()));
+  if(ME.admin&&window.showAdmin)B.appendChild(btn('🛡️ Admin commands','red',()=>window.showAdmin()));
   B.appendChild(btn('← Back to lobby (game is saved)','ghost',()=>{closeModal();leaveGame()}));
   B.appendChild(btn('Close','',closeModal));
 };
@@ -1782,8 +1747,8 @@ $('#guestBtn').onclick=async()=>{
 $('#authForm').onsubmit=async e=>{e.preventDefault();$('#aErr').textContent='';$('#aGo').disabled=true;
   try{const r=await rpc(signMode?'tyc_signup':'tyc_login',{p_username:$('#aUser').value,p_password:$('#aPass').value});signIn(r)}catch(err){$('#aErr').textContent=err.message}
   $('#aGo').disabled=false};
-function signIn(r){renderModePick();mePick={};ME={token:r.token,id:r.id,username:r.username,guest:!!r.guest,admin:!!r.admin,pref_token:r.pref_token||null,pref_color:r.pref_color||null};lsSet('tyc_session',JSON.stringify({...ME,offline:OFFLINE}));$('#aPass').value='';resetSeats();renderBoardPick();goLobby()}
-function signOutLocal(){lsSet('tyc_session',null);ME=null;clearInterval(pollTimer);GAME=null;G=null;closeModal();show('auth');bgBoard(pickBoard)}
+function signIn(r){renderModePick();mePick={};ME={token:r.token,id:r.id,username:r.username,guest:!!r.guest,admin:!!r.admin,pref_token:r.pref_token||null,pref_color:r.pref_color||null};lsSet('tyc_session',JSON.stringify({...ME,offline:OFFLINE}));$('#aPass').value='';resetSeats();renderBoardPick();goLobby();loadAdmin()}
+function signOutLocal(){lsSet('tyc_session',null);ME=null;window.showAdmin=undefined;clearInterval(pollTimer);GAME=null;G=null;closeModal();show('auth');bgBoard(pickBoard)}
 $('#logoutBtn').onclick=async()=>{if(ME.guest){lsSet('tyc_session',null);ME=null;setOffline(false);signOutLocal();return}try{await rpc('tyc_logout',{p_token:ME.token})}catch(e){}signOutLocal()};
 
 /* =================== BOOT =================== */
@@ -1794,7 +1759,7 @@ if(lsGet('tyc_lite')==='1'||(PHONE&&lsGet('tyc_lite')!=='0'))document.body.class
   setOffline(OFFLINE);bgBoard(pickBoard);
   let s=null;try{s=JSON.parse(lsGet('tyc_session'))}catch(e){}
   if(s&&s.token){OFFLINE=!!s.offline;setOffline(OFFLINE);
-    try{const me=await rpc('tyc_me',{p_token:s.token});ME={token:s.token,id:me.id,username:me.username,guest:!!me.guest,admin:!!me.admin,pref_token:me.pref_token||null,pref_color:me.pref_color||null};renderModePick();resetSeats();renderBoardPick();goLobby();return}catch(e){}}
+    try{const me=await rpc('tyc_me',{p_token:s.token});ME={token:s.token,id:me.id,username:me.username,guest:!!me.guest,admin:!!me.admin,pref_token:me.pref_token||null,pref_color:me.pref_color||null};renderModePick();resetSeats();renderBoardPick();goLobby();loadAdmin();return}catch(e){}}
   show('auth');
 })();
 </script>
