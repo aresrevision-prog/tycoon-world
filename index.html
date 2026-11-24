@@ -242,6 +242,10 @@ body.lite .env,body.lite #seats3,body.lite .tside{display:none}
 .pc.open{opacity:.55;border-style:dashed;border-color:var(--line)}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-left:6px;vertical-align:middle;background:#5b6480}
 .dot.on{background:#22c55e;box-shadow:0 0 8px #22c55e}
+#voteBar{position:absolute;left:50%;top:70px;transform:translateX(-50%);z-index:20;width:min(460px,94vw);padding:14px 16px;border:2px solid var(--acc2);box-shadow:0 0 30px rgba(92,225,230,.35),0 20px 50px rgba(0,0,0,.5);text-align:center;animation:pop .25s}
+#voteBar .vt{font-size:18px;font-weight:900}#voteBar .vm{color:var(--mut);margin:4px 0 8px}
+#voteBar .vbar{height:8px;border-radius:8px;background:rgba(255,255,255,.1);overflow:hidden;display:flex;margin:6px 0 10px}#voteBar .vbar i{display:block;height:100%}
+@media (max-width:900px){#voteBar{top:120px}}
 .vote{background:rgba(92,225,230,.1);border:1px solid rgba(92,225,230,.4);border-radius:12px;padding:10px;margin-bottom:10px}
 .auc{background:rgba(255,207,74,.1);border:1px solid rgba(255,207,74,.35);border-radius:12px;padding:10px;margin-bottom:10px;font-weight:700}
 .win .wt{font-size:44px}
@@ -374,6 +378,7 @@ body.lite .env,body.lite #seats3,body.lite .tside{display:none}
   </div>
   <div id="status" class="glass"></div>
   <div id="emobar" class="glass"></div>
+  <div id="voteBar" class="glass hide"></div>
   <div id="camctl">
     <button id="cL" title="Rotate left">⟲</button><button id="cR" title="Rotate right">⟳</button>
     <button id="cT" title="Top / 3D view">⬒</button><button id="cIn">+</button><button id="cOut">−</button>
@@ -1413,7 +1418,7 @@ function render(){
   }
   markCurrent();
   if(G.status==='finished'&&G.winner!=null)seatPose(G.winner,'wave');
-  fxUpdate();renderPlayers();renderActions();renderLog();renderStatus();
+  fxUpdate();renderPlayers();renderActions();renderLog();renderStatus();renderVote();
   if(G.card&&G.card.n!==view.cardN){view.cardN=G.card.n;const cd=G.card;setTimeout(()=>{flyCard(cd.deck);setTimeout(()=>showCard(cd),500)},newRoll?1600:200)}
   if(G.trade&&myHuman(G.trade.to)&&view.tradeShown!==JSON.stringify(G.trade))showTradeOffer();
   if(!G.trade&&view.tradeShown){view.tradeShown=null;if($('#mbox').dataset.k==='offer')closeModal()}
@@ -1462,12 +1467,6 @@ function renderActions(){
     if(isHost())B.appendChild(btn(`🚀 Start game (${filled} players)`,'big',startFromLobby,filled<2,1));else msg.innerHTML+='<br><br>Waiting for the host to start…';
     return}
   const p=cur(),a=actorIdx(),ap=G.players[a];
-  if(G.vote){const v=G.vote,need=Math.floor(v.voters.length/2)+1,vb=el('div','vote');
-    vb.innerHTML=`🗳️ <b>Skip ${esc(G.players[v.t].name)}'s turn?</b><br><span class="mut">${v.yes.length} yes · ${v.no.length} no · ${need} yes needed</span>`;
-    if(!SPECT&&v.voters.includes(ME.id)&&!v.yes.includes(ME.id)&&!v.no.includes(ME.id)){const r=el('div','row');r.style.marginTop='8px';r.appendChild(btn('✅ Yes','green sm',()=>actRetry(()=>castVote(true))));r.appendChild(btn('❌ No','red sm',()=>actRetry(()=>castVote(false))));vb.appendChild(r)}
-    if(G.players[v.t].uid===ME.id)vb.innerHTML+='<div style="margin-top:6px;font-weight:700;color:var(--acc)">Make your move now to avoid being skipped!</div>';
-    if(isHost()&&!SPECT){const c=btn('Cancel vote','ghost sm',()=>actRetry(()=>{if(G.vote){G.vote=null;log('🗳️ Vote cancelled')}}));c.style.marginTop='6px';vb.appendChild(c)}
-    A.insertBefore(vb,msg)}
   const canVote=!SPECT&&isHost()&&!G.vote&&ap&&ap.kind==='user'&&ap.uid!==ME.id;
   if(canVote){const vb=btn(`⏭️ Vote to skip ${esc(ap.name)}${view.online&&!view.online.has(ap.uid)?' (offline)':''}`,'ghost sm',()=>actRetry(startVote));vb.style.marginTop='8px';A.appendChild(vb)}
   if(SPECT){head.textContent='👀 Spectating';msg.innerHTML=`You're watching this game live. Send emoji reactions!<br><span class="mut">${esc(p.name)}'s turn</span>`;}
@@ -1505,6 +1504,19 @@ function renderActions(){
     B.appendChild(btn('✅ Pay debt','green big',()=>act(doPayDebt),p.cash<0,1));manage();
     B.appendChild(btn('💥 Declare bankruptcy','red',()=>confirmBox('Declare bankruptcy?','You\'ll be out of the game and your assets go to your creditor.','Go bankrupt',()=>act(doBankrupt))));
   }
+}
+function renderVote(){
+  const V=$('#voteBar');if(!G||!G.vote||G.status!=='active'){V.classList.add('hide');view.voteAt=null;return}
+  const v=G.vote,t=G.players[v.t],need=Math.floor(v.voters.length/2)+1,tot=v.voters.length||1;
+  if(view.voteAt!==v.at){view.voteAt=v.at;sfx.turn();toast(`🗳️ Vote to skip ${t.name}'s turn!`)}
+  const isTarget=t.uid===ME.id,canV=!SPECT&&v.voters.includes(ME.id)&&!v.yes.includes(ME.id)&&!v.no.includes(ME.id),voted=v.yes.includes(ME.id)?'You voted YES':v.no.includes(ME.id)?'You voted NO':'';
+  V.innerHTML=`<div class="vt">🗳️ Vote: skip ${esc(t.name)}'s turn?</div><div class="vm">${v.yes.length} yes · ${v.no.length} no · ${need} yes needed of ${v.voters.length} voter${v.voters.length===1?'':'s'}</div>
+    <div class="vbar"><i style="width:${v.yes.length/tot*100}%;background:#22c55e"></i><i style="width:${v.no.length/tot*100}%;background:#e11d48"></i></div>
+    ${isTarget?'<div style="font-weight:800;color:var(--acc)">⚡ Make your move now to avoid being skipped!</div>':''}${voted?`<div class="mut" style="font-weight:700">${voted}</div>`:''}${!canV&&!isTarget&&!voted?'<div class="mut">Waiting for votes…</div>':''}`;
+  const r=el('div','row');r.style.justifyContent='center';r.style.marginTop='8px';
+  if(canV){r.appendChild(btn('✅ Yes, skip','green',()=>actRetry(()=>castVote(true))));r.appendChild(btn('❌ No','red',()=>actRetry(()=>castVote(false))))}
+  if(isHost()&&!SPECT)r.appendChild(btn('Cancel vote','ghost sm',()=>actRetry(()=>{if(G.vote){G.vote=null;log('🗳️ Vote cancelled')}})));
+  if(r.children.length)V.appendChild(r);V.classList.remove('hide');
 }
 function renderLog(){$('#logp').innerHTML=G.log.slice(0,40).map(l=>`<div>${esc(l)}</div>`).join('')}
 function renderStatus(){
@@ -1618,7 +1630,7 @@ async function openGame(id,spectate){
   }catch(e){toast(e.message)}
 }
 function leaveGame(){
-  clearInterval(pollTimer);clearTimeout(cpuTimer);GAME=null;G=null;SPECT=false;closeModal();$('#cardpop').classList.remove('on');
+  $('#voteBar').classList.add('hide');clearInterval(pollTimer);clearTimeout(cpuTimer);GAME=null;G=null;SPECT=false;closeModal();$('#cardpop').classList.remove('on');
   goLobby();
 }
 
