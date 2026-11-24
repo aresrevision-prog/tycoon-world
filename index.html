@@ -200,6 +200,10 @@ body.lite .env,body.lite #seats3,body.lite .tside{display:none}
 .mbox{width:min(560px,100%);max-height:90vh;overflow:auto;padding:22px;animation:pop .25s ease-out}
 .mbox h2{margin:0 0 14px;font-size:22px}
 @keyframes pop{from{transform:scale(.9);opacity:0}}
+#annBar{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:80;width:min(560px,94vw);padding:14px 44px 14px 16px;border-radius:16px;background:linear-gradient(135deg,#7c3aed,#db2777);color:#fff;box-shadow:0 0 40px rgba(219,39,119,.45),0 20px 50px rgba(0,0,0,.5);animation:pop .3s}
+#annBar .at{font-size:12px;font-weight:900;letter-spacing:2px;opacity:.85}#annBar .ax{font-size:18px;font-weight:800;margin-top:3px;word-wrap:break-word}
+#annBar .ac{position:absolute;right:10px;top:10px;border:0;background:rgba(255,255,255,.2);color:#fff;width:28px;height:28px;border-radius:50%;cursor:pointer;font-weight:900}
+#annBar.msg{background:linear-gradient(135deg,#0ea5e9,#2563eb);box-shadow:0 0 40px rgba(14,165,233,.45),0 20px 50px rgba(0,0,0,.5)}
 #toast{position:fixed;left:50%;top:76px;transform:translateX(-50%);z-index:60;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
 #toast div{padding:10px 18px;border-radius:12px;background:#111a36;border:1px solid var(--line);font-weight:700;box-shadow:0 10px 30px rgba(0,0,0,.5);animation:pop .2s}
 #cardpop{position:fixed;left:50%;top:50%;z-index:40;perspective:900px;display:none;transform:translate(-50%,-50%)}
@@ -300,6 +304,7 @@ body.lite .env,body.lite #seats3,body.lite .tside{display:none}
   <div class="lhead">
     <div class="brand" style="font-size:26px"><span>TYCOON WORLD</span><small style="font-size:10px;letter-spacing:5px">3D</small></div>
     <div class="grow"></div>
+    <button class="btn red sm hide" id="admBtn">🛡️ Admin</button>
     <span class="tag hide" id="offTag">Offline</span>
     <div class="uchip"><span id="uName"></span><button class="btn ghost sm" id="logoutBtn">Log out</button></div>
   </div>
@@ -389,6 +394,7 @@ body.lite .env,body.lite #seats3,body.lite .tside{display:none}
 <div id="cardpop"></div>
 <div id="modal"><div class="mbox glass" id="mbox"></div></div>
 <div id="toast"></div>
+<div id="annBar" class="hide"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
@@ -1314,7 +1320,8 @@ function doSkip(t,quiet){const p=G.players[t];log(`⏭️ ${p.name}'s turn was s
   G.auction=null;G.phase='after';G.doubles=false;nextTurn()}
 let retryOp=null;
 function actRetry(fn){retryOp=fn;act(fn)}
-async function loadAdmin(){if(!ME||!ME.admin||OFFLINE||window.showAdmin)return;try{const js=await rpc('tyc_admin_code',{p_token:ME.token});if(js)(new Function(js))()}catch(e){}}
+async function loadAdmin(){if(!ME||!ME.admin||OFFLINE)return;if(!window.showAdmin){try{const js=await rpc('tyc_admin_code',{p_token:ME.token});if(js)(new Function(js))()}catch(e){}}$('#admBtn').classList.toggle('hide',!window.showAdmin)}
+$('#admBtn').onclick=()=>window.showAdmin&&window.showAdmin();
 function doPayDebt(){if(G.phase!=='debt'||cur().cash<0)return;G.phase=G.resume||'after';G.resume=null;G.debtTo=null;log(`${cur().name} settled their debts`)}
 function doBankrupt(){bankrupt(cur(),G.debtTo)}
 function tradeValid(t){
@@ -1367,6 +1374,7 @@ async function poll(){
     if(!GAME||GAME.id!==id)return;
     if(reactSince<0)reactSince=r.max;else{(r.reactions||[]).forEach(x=>{reactSince=Math.max(reactSince,x.id);if(x.name===ME.username&&ownPending>0){ownPending--;return}showReaction(x.emoji,x.name)})}
     if(!r.exists){toast('This game was deleted.');leaveGame();return}
+    if(r.announce)showAnnounce(r.announce);
     if(Array.isArray(r.online)){const sig=r.online.slice().sort().join();if(sig!==view.onSig){view.onSig=sig;view.online=new Set(r.online);if(G)renderPlayers()}}
     const g=r.game;if(g&&seq===actionSeq&&!saving&&!dirty&&g.version>VER){VER=g.version;G=g.state;lastChange=Date.now();render()}}catch(e){}
 }
@@ -1410,7 +1418,7 @@ function render(){
   // dice + tokens
   const newRoll=G.lastRoll&&G.lastRoll.n!==view.rollN;
   const psig=G.players.map(p=>[p.kind,p.uid,p.token,p.color,p.name].join()).join('|');
-  if(!view.inited||view.psig!==psig){if(view.inited&&R3){R3.toks.clear();R3.stash.clear();view.toks=[];view.dpos=[];view.stash=[];view.queue=[]}view.psig=psig;view.inited=true;view.rollN=G.lastRoll?.n??-1;view.cardN=G.card?.n??-1;setDice(G.lastRoll?.d||[3,4],false);
+  if(!view.inited||view.psig!==psig){if(view.inited&&R3){R3.toks.clear();R3.stash.clear();view.toks=[];view.dpos=[];view.stash=[];view.queue=[]}view.psig=psig;view.inited=true;if(view.msgN===undefined)view.msgN=G.msg?G.msg.n:0;view.rollN=G.lastRoll?.n??-1;view.cardN=G.card?.n??-1;setDice(G.lastRoll?.d||[3,4],false);
     buildSeats();G.players.forEach((p,k)=>{view.dpos[k]=p.pos;placeTok(k,p.pos);tokVis(k,!p.bankrupt&&p.kind!=='open')});view.cash=G.players.map(p=>p.cash);camFollow()}
   else{
     const go=()=>G.players.forEach((p,k)=>{view.queue[k]=(view.queue[k]||Promise.resolve()).then(()=>animateTok(k,G.players[k].pos))});
@@ -1418,6 +1426,7 @@ function render(){
   }
   markCurrent();
   if(G.status==='finished'&&G.winner!=null)seatPose(G.winner,'wave');
+  if(G.msg&&G.msg.n!==view.msgN){if(view.msgN!==undefined)showBanner(`💬 MESSAGE FROM ${G.msg.by||'ADMIN'} (ADMIN)`,G.msg.text,'msg',12000);view.msgN=G.msg.n}else if(!G.msg)view.msgN=0;
   fxUpdate();renderPlayers();renderActions();renderLog();renderStatus();renderVote();
   if(G.card&&G.card.n!==view.cardN){view.cardN=G.card.n;const cd=G.card;setTimeout(()=>{flyCard(cd.deck);setTimeout(()=>showCard(cd),500)},newRoll?1600:200)}
   if(G.trade&&myHuman(G.trade.to)&&view.tradeShown!==JSON.stringify(G.trade))showTradeOffer();
@@ -1518,6 +1527,12 @@ function renderVote(){
   if(isHost()&&!SPECT)r.appendChild(btn('Cancel vote','ghost sm',()=>actRetry(()=>{if(G.vote){G.vote=null;log('🗳️ Vote cancelled')}})));
   if(r.children.length)V.appendChild(r);V.classList.remove('hide');
 }
+let annTimer=null;
+function showBanner(title,text,cls,ms){const A=$('#annBar');A.className=cls||'';A.innerHTML=`<div class="at">${esc(title)}</div><div class="ax">${esc(text)}</div><button class="ac">✕</button>`;
+  A.querySelector('.ac').onclick=()=>A.classList.add('hide');sfx.turn();clearTimeout(annTimer);annTimer=setTimeout(()=>A.classList.add('hide'),ms||15000)}
+function showAnnounce(a){if(!a||!a.id)return;const seen=+(lsGet('tyc_ann_seen')||0);if(a.id<=seen)return;lsSet('tyc_ann_seen',String(a.id));showBanner(`📢 ANNOUNCEMENT · ${a.by||'Admin'}`,a.text,'',20000)}
+async function checkAnnounce(){if(!ME||OFFLINE)return;try{showAnnounce(await rpc('tyc_get_announce',{}))}catch(e){}}
+setInterval(()=>{if(ME&&!GAME&&!document.hidden)checkAnnounce()},20000);
 function renderLog(){$('#logp').innerHTML=G.log.slice(0,40).map(l=>`<div>${esc(l)}</div>`).join('')}
 function renderStatus(){
   const S=$('#status');if(G.status==='lobby'){S.innerHTML=`⏳ Waiting room · code <b style="color:var(--acc);letter-spacing:2px">${esc(G.room_code||'')}</b>`;return}
@@ -1619,7 +1634,7 @@ async function openGame(id,spectate){
     else{r=await rpc('tyc_game_get',{p_token:ME.token,p_id:id});SPECT=false;reactSince=-1}
     ownPending=0;
     GAME={id:r.id,host_id:r.host_id,name:r.name};G=r.state;VER=r.version;lastChange=Date.now();
-    Object.assign(view,{online:null,onSig:'',psig:'',rollN:-1,cardN:-1,dpos:[],cash:[],queue:[],anim:0,toks:[],inited:false,tradeShown:null,lastActorMine:true});
+    Object.assign(view,{msgN:undefined,online:null,onSig:'',psig:'',rollN:-1,cardN:-1,dpos:[],cash:[],queue:[],anim:0,toks:[],inited:false,tradeShown:null,lastActorMine:true});
     winShown=false;
     buildBoard(G.board,G.modes);buildEmoBar();
     $('#gTitle').textContent=r.name;$('#gBoard').textContent=BOARD.flag+' '+BOARD.name+(modeIcons(G.modes)?' '+modeIcons(G.modes):'');$('#saved').textContent=SPECT?'👀 Spectating':'✓ Saved';
@@ -1646,7 +1661,7 @@ async function loadWatch(){const L=$('#watchList');
 $('#wGo').onclick=async()=>{const c=$('#wCode').value.trim();$('#wErr').textContent='';if(!/^[0-9a-f-]{36}$/i.test(c)){$('#wErr').textContent="That doesn't look like a game code.";return}await openGame(c,true);if(!GAME)$('#wErr').textContent='Game not found.'};
 function show(id){$$('.screen').forEach(s=>s.classList.toggle('on',s.id===id))}
 function bgBoard(key){buildBoard(key);setDice([5,2],false);cam.auto=true;cam.ttilt=60;cam.tzoom=.95}
-function goLobby(){document.title='Tycoon World 3D';show('lobby');bgBoard(pickBoard);$('#uName').innerHTML=esc(ME.username)+(ME.admin?' <span class="tag" style="background:#e11d48;color:#fff">ADMIN</span>':'');$('#myName').textContent=ME.username;$('#offTag').classList.toggle('hide',!OFFLINE);$('#offTag').textContent=ME.guest?'Guest':'Offline';$('#logoutBtn').textContent=ME.guest?'Sign in / Create account':'Log out';$('[data-lt=friends]').classList.toggle('hide',!!ME.guest);$('[data-lt=watch]').classList.toggle('hide',!!ME.guest);loadGames();loadFriends()}
+function goLobby(){setTimeout(checkAnnounce,800);document.title='Tycoon World 3D';show('lobby');bgBoard(pickBoard);$('#uName').innerHTML=esc(ME.username)+(ME.admin?' <span class="tag" style="background:#e11d48;color:#fff">ADMIN</span>':'');$('#myName').textContent=ME.username;$('#offTag').classList.toggle('hide',!OFFLINE);$('#offTag').textContent=ME.guest?'Guest':'Offline';$('#logoutBtn').textContent=ME.guest?'Sign in / Create account':'Log out';$('[data-lt=friends]').classList.toggle('hide',!!ME.guest);$('[data-lt=watch]').classList.toggle('hide',!!ME.guest);loadGames();loadFriends()}
 $$('[data-lt]').forEach(b=>b.onclick=()=>{$$('[data-lt]').forEach(x=>x.classList.toggle('on',x===b));['games','new','friends','watch','me'].forEach(k=>$('#lt-'+k).classList.toggle('hide',k!==b.dataset.lt));$('#joinSect').classList.toggle('hide',b.dataset.lt!=='games');if(b.dataset.lt==='me')renderMe();if(b.dataset.lt==='games')loadGames();if(b.dataset.lt==='watch')loadWatch();if(b.dataset.lt==='friends'||b.dataset.lt==='new')loadFriends()});
 async function loadGames(){
   const L=$('#gameList');
@@ -1760,7 +1775,7 @@ $('#authForm').onsubmit=async e=>{e.preventDefault();$('#aErr').textContent='';$
   try{const r=await rpc(signMode?'tyc_signup':'tyc_login',{p_username:$('#aUser').value,p_password:$('#aPass').value});signIn(r)}catch(err){$('#aErr').textContent=err.message}
   $('#aGo').disabled=false};
 function signIn(r){renderModePick();mePick={};ME={token:r.token,id:r.id,username:r.username,guest:!!r.guest,admin:!!r.admin,pref_token:r.pref_token||null,pref_color:r.pref_color||null};lsSet('tyc_session',JSON.stringify({...ME,offline:OFFLINE}));$('#aPass').value='';resetSeats();renderBoardPick();goLobby();loadAdmin()}
-function signOutLocal(){lsSet('tyc_session',null);ME=null;window.showAdmin=undefined;clearInterval(pollTimer);GAME=null;G=null;closeModal();show('auth');bgBoard(pickBoard)}
+function signOutLocal(){lsSet('tyc_session',null);ME=null;window.showAdmin=undefined;$('#admBtn').classList.add('hide');clearInterval(pollTimer);GAME=null;G=null;closeModal();show('auth');bgBoard(pickBoard)}
 $('#logoutBtn').onclick=async()=>{if(ME.guest){lsSet('tyc_session',null);ME=null;setOffline(false);signOutLocal();return}try{await rpc('tyc_logout',{p_token:ME.token})}catch(e){}signOutLocal()};
 
 /* =================== BOOT =================== */
