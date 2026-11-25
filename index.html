@@ -1312,7 +1312,7 @@ function voteCheck(){const v=G.vote;if(!v)return;const need=Math.floor(v.voters.
 function startVote(){const t=actorIdx(),p=G.players[t];if(!isHost()||G.vote||p.kind!=='user'||p.uid===ME.id)return;
   G.vote={t,yes:[ME.id],no:[],voters:voters(t),at:Date.now()};log(`🗳️ ${ME.username} started a vote to skip ${p.name}'s turn`);voteCheck()}
 function castVote(yes){const v=G.vote;if(!v||!v.voters.includes(ME.id)||v.yes.includes(ME.id)||v.no.includes(ME.id))return;(yes?v.yes:v.no).push(ME.id);log(`🗳️ ${ME.username} voted ${yes?'YES':'NO'}`);voteCheck()}
-function doSkip(t,quiet){const p=G.players[t];log(`⏭️ ${p.name}'s turn was skipped${quiet?'':' by vote'}`);
+function doSkip(t,quiet){const p=G.players[t];p.cash+=25;log(`⏭️ ${p.name}'s turn was skipped${quiet?'':' by vote'} (+${money(25)})`);
   if(G.trade&&G.trade.to===t){G.trade=null;return}
   if(G.phase==='auction'&&G.auction&&bidder()===t){doAucPass();return}
   if(G.turn!==t)return;
