@@ -281,12 +281,13 @@ body.lite .env,body.lite #seats3,body.lite .tside{display:none}
 <div id="auth" class="screen">
   <div class="authbox glass">
     <div class="brand"><span>TYCOON WORLD</span><small>3D • ONLINE • WITH FRIENDS</small></div>
-    <div class="tabs" style="margin-top:22px"><button id="tLogin" class="on">Log in</button><button id="tSign">Create account</button></div>
+    <div class="mut" style="font-size:13px;text-align:center;margin-top:14px">Sign in with your <b style="color:#3ddc84">MagicWinter account</b> — one account for every MagicWinter Studio game. Had a Tycoon World account? Use the same username and password.</div>
+    <div class="tabs" style="margin-top:14px"><button id="tLogin" class="on">Sign in</button><button id="tSign">New MagicWinter account</button></div>
     <form id="authForm">
-      <div class="field"><label>Username</label><input id="aUser" autocomplete="username" maxlength="20" placeholder="e.g. dvxnm"></div>
+      <div class="field"><label>MagicWinter username</label><input id="aUser" autocomplete="username" maxlength="20" placeholder="e.g. dvxnm"></div>
       <div class="field"><label>Password</label><input id="aPass" type="password" autocomplete="current-password" placeholder="••••••"></div>
       <div class="err" id="aErr"></div>
-      <button class="btn big" id="aGo" type="submit">Log in</button>
+      <button class="btn big" id="aGo" type="submit">Sign in with MagicWinter</button>
     </form>
     <div class="row" style="margin-top:14px;justify-content:space-between">
       <span class="mut" style="font-size:13px" id="modeLbl">Online accounts — play with friends anywhere</span>
@@ -1761,7 +1762,7 @@ function resetSeats(){seats=[];addSeat({kind:'user',uid:ME.id,name:ME.username},
 
 /* =================== AUTH =================== */
 let signMode=false;
-function setAuthMode(s){signMode=s;$('#tLogin').classList.toggle('on',!s);$('#tSign').classList.toggle('on',s);$('#aGo').textContent=s?'Create account':'Log in';$('#aPass').autocomplete=s?'new-password':'current-password';$('#aErr').textContent=''}
+function setAuthMode(s){signMode=s;$('#tLogin').classList.toggle('on',!s);$('#tSign').classList.toggle('on',s);$('#aGo').textContent=s?'Create MagicWinter account':'Sign in with MagicWinter';$('#aPass').autocomplete=s?'new-password':'current-password';$('#aErr').textContent=''}
 $('#tLogin').onclick=()=>setAuthMode(false);$('#tSign').onclick=()=>setAuthMode(true);
 function setOffline(v){OFFLINE=v;lsSet('tyc_offline',v?'1':'0');$('#offBtn').textContent=v?'Online mode':'Offline mode';$('#modeLbl').textContent=v?'Offline — saved on this device only':'Online accounts — play with friends anywhere'}
 $('#offBtn').onclick=()=>setOffline(!OFFLINE);
@@ -1771,12 +1772,23 @@ $('#guestBtn').onclick=async()=>{
   try{if(!OFFLINE){const r=await remoteRpc('tyc_guest',{p_name:n});$('#guestBtn').disabled=false;signIn(r);return}}catch(e){toast('Server unreachable — playing offline on this device')}
   $('#guestBtn').disabled=false;setOffline(true);signIn(localRpc('tyc_guest',{p_name:n}));
 };
-$('#authForm').onsubmit=async e=>{e.preventDefault();$('#aErr').textContent='';$('#aGo').disabled=true;
-  try{const r=await rpc(signMode?'tyc_signup':'tyc_login',{p_username:$('#aUser').value,p_password:$('#aPass').value});signIn(r)}catch(err){$('#aErr').textContent=err.message}
+/* MagicWinter accounts — the only way to sign in (guests can still play) */
+const MW_SESS='mw.session';
+function mwSaved(){for(const st of [sessionStorage,localStorage]){try{const v=JSON.parse(st.getItem(MW_SESS));if(v&&v.kind==='mw'&&v.token&&(!v.until||v.until>Date.now()))return v}catch(e){}}return null}
+function mwForget(){try{localStorage.removeItem(MW_SESS);sessionStorage.removeItem(MW_SESS)}catch(e){}}
+async function mwEnter(token){const r=await remoteRpc('tyc_login_mw',{p_mw_token:token});signIn({...r,mw:true})}
+$('#authForm').onsubmit=async e=>{e.preventDefault();$('#aErr').textContent='';
+  if(OFFLINE){$('#aErr').textContent='MagicWinter sign-in needs the internet — switch to Online mode, or play as a guest below.';return}
+  const u=$('#aUser').value.trim(),p=$('#aPass').value;if(!u||!p){$('#aErr').textContent='Enter your MagicWinter username and password.';return}
+  $('#aGo').disabled=true;
+  try{const a=await remoteRpc(signMode?'mw_signup':'mw_login',{p_username:u,p_password:p});
+    if(!a||!a.token)throw new Error((a&&a.error)||'Sign-in failed — try again');
+    localStorage.setItem(MW_SESS,JSON.stringify({kind:'mw',user:a.username||u,token:a.token,until:Date.now()+30*864e5}));
+    await mwEnter(a.token)}catch(err){$('#aErr').textContent=err.message}
   $('#aGo').disabled=false};
-function signIn(r){renderModePick();mePick={};ME={token:r.token,id:r.id,username:r.username,guest:!!r.guest,admin:!!r.admin,pref_token:r.pref_token||null,pref_color:r.pref_color||null};lsSet('tyc_session',JSON.stringify({...ME,offline:OFFLINE}));$('#aPass').value='';resetSeats();renderBoardPick();goLobby();loadAdmin()}
+function signIn(r){renderModePick();mePick={};ME={token:r.token,id:r.id,username:r.username,guest:!!r.guest,admin:!!r.admin,mw:!!r.mw,pref_token:r.pref_token||null,pref_color:r.pref_color||null};lsSet('tyc_session',JSON.stringify({...ME,offline:OFFLINE}));$('#aPass').value='';resetSeats();renderBoardPick();goLobby();loadAdmin()}
 function signOutLocal(){lsSet('tyc_session',null);ME=null;window.showAdmin=undefined;$('#admBtn').classList.add('hide');clearInterval(pollTimer);GAME=null;G=null;closeModal();show('auth');bgBoard(pickBoard)}
-$('#logoutBtn').onclick=async()=>{if(ME.guest){lsSet('tyc_session',null);ME=null;setOffline(false);signOutLocal();return}try{await rpc('tyc_logout',{p_token:ME.token})}catch(e){}signOutLocal()};
+$('#logoutBtn').onclick=async()=>{if(ME.guest){lsSet('tyc_session',null);ME=null;setOffline(false);signOutLocal();return}try{await rpc('tyc_logout',{p_token:ME.token})}catch(e){}mwForget();signOutLocal()};
 
 /* =================== BOOT =================== */
 const PHONE=matchMedia('(max-width:900px), (pointer:coarse)').matches||/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
@@ -1785,8 +1797,10 @@ if(lsGet('tyc_lite')==='1'||(PHONE&&lsGet('tyc_lite')!=='0'))document.body.class
   initGL();
   setOffline(OFFLINE);bgBoard(pickBoard);
   let s=null;try{s=JSON.parse(lsGet('tyc_session'))}catch(e){}
+  if(s&&s.token&&!s.guest&&!s.mw){lsSet('tyc_session',null);s=null} // old Tycoon-only sign-ins must switch to MagicWinter
   if(s&&s.token){OFFLINE=!!s.offline;setOffline(OFFLINE);
-    try{const me=await rpc('tyc_me',{p_token:s.token});ME={token:s.token,id:me.id,username:me.username,guest:!!me.guest,admin:!!me.admin,pref_token:me.pref_token||null,pref_color:me.pref_color||null};renderModePick();resetSeats();renderBoardPick();goLobby();loadAdmin();return}catch(e){}}
+    try{const me=await rpc('tyc_me',{p_token:s.token});ME={token:s.token,id:me.id,username:me.username,guest:!!me.guest,admin:!!me.admin,mw:!!s.mw,pref_token:me.pref_token||null,pref_color:me.pref_color||null};renderModePick();resetSeats();renderBoardPick();goLobby();loadAdmin();return}catch(e){}}
+  const mw=mwSaved();if(mw&&!OFFLINE){try{await mwEnter(mw.token);return}catch(e){mwForget()}}
   show('auth');
 })();
 </script>
